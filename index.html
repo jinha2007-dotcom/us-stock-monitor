@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>미국주식 볼린저 추세 전략 — 실시간 (Massive)</title>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #2d333b;
+    --text: #e6edf3; --dim: #8b949e;
+    --green: #26a269; --red: #e5534b; --yellow: #d4a72c; --blue: #4493f8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', 'Malgun Gothic', sans-serif; padding: 16px; }
+  header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  h1 { font-size: 19px; font-weight: 700; }
+  .badge { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: 12px; color: var(--dim); }
+  .badge.warn { border-color: var(--yellow); color: var(--yellow); }
+  #mktDot { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); display: inline-block; margin-right: 5px; }
+  #mktDot.open { background: var(--green); }
+  #mktDot.ext { background: var(--yellow); }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .toolbar input[type=text] { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 6px 10px; width: 90px; font-size: 14px; text-transform: uppercase; }
+  .toolbar input[type=number] { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 5px 6px; width: 64px; font-size: 13px; }
+  button { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 6px 12px; font-size: 13px; cursor: pointer; }
+  button:hover { border-color: var(--blue); }
+  button.active { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 700; }
+  button.go { background: var(--green); border-color: var(--green); color: #fff; font-weight: 700; }
+  .sep { width: 1px; height: 22px; background: var(--border); }
+  .lbl { font-size: 12px; color: var(--dim); }
+  #keyBox { background: var(--panel); border: 2px solid var(--yellow); border-radius: 8px; padding: 14px; margin-bottom: 12px; display: none; }
+  #keyBox.show { display: block; }
+  #keyBox p { font-size: 13px; color: var(--dim); margin-bottom: 8px; }
+  #keyBox input { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 7px 10px; width: min(380px, 90%); font-size: 13px; font-family: monospace; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+  .card .label { font-size: 11px; color: var(--dim); margin-bottom: 4px; }
+  .card .value { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  #sigCard { border-width: 2px; }
+  #sigCard.long { border-color: var(--green); } #sigCard.long .value { color: var(--green); }
+  #sigCard.short { border-color: var(--red); } #sigCard.short .value { color: var(--red); }
+  #sigCard.flat .value { color: var(--dim); }
+  #chart { height: 460px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 900px) { .row { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+  .panel h2 { font-size: 14px; margin-bottom: 8px; color: var(--dim); }
+  #log { max-height: 260px; overflow-y: auto; font-size: 13px; }
+  #log .entry { padding: 6px 4px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: baseline; }
+  #log .t { color: var(--dim); font-size: 11px; white-space: nowrap; }
+  .tag { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 4px; white-space: nowrap; }
+  .tag.long { background: rgba(38,162,105,.18); color: var(--green); }
+  .tag.short { background: rgba(229,83,75,.18); color: var(--red); }
+  .tag.exit { background: rgba(212,167,44,.18); color: var(--yellow); }
+  .tag.stop { background: rgba(229,83,75,.3); color: var(--red); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td { padding: 5px 4px; border-bottom: 1px solid var(--border); }
+  td:last-child { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .pos { color: var(--green); } .neg { color: var(--red); }
+  footer { margin-top: 12px; font-size: 11px; color: var(--dim); line-height: 1.6; }
+  #err { color: var(--red); font-size: 13px; margin-bottom: 10px; display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🇺🇸 미국주식 볼린저 추세 전략</h1>
+  <span class="badge" id="mktBadge"><span id="mktDot"></span><span id="mktText">시장상태 확인 중…</span></span>
+  <span class="badge" id="delayBadge">—</span>
+  <span class="badge" id="updBadge">—</span>
+  <span class="badge"><label style="cursor:pointer"><input type="checkbox" id="notifChk"> 🔔 브라우저 알림</label></span>
+  <button id="keyChangeBtn" style="font-size:11px;padding:3px 8px;">🔑 API 키 변경</button>
+</header>
+
+<div id="keyBox">
+  <p>🔑 Massive.com API 키를 입력하세요. 키는 <b>이 브라우저(이 기기)에만</b> 저장되며 서버나 파일로 전송되지 않습니다.</p>
+  <input type="password" id="keyInput" placeholder="Massive API Key">
+  <button class="go" id="keySaveBtn">저장하고 시작</button>
+</div>
+
+<div class="toolbar">
+  <input type="text" id="symInput" value="SPY" maxlength="8">
+  <button class="go" id="loadBtn">조회</button>
+  <span id="quickBtns"></span>
+  <span class="sep"></span>
+  <span class="lbl">분봉:</span>
+  <button class="tfBtn" data-tf="5">5분</button>
+  <button class="tfBtn" data-tf="15">15분</button>
+  <button class="tfBtn active" data-tf="30">30분</button>
+  <span class="sep"></span>
+  <span class="lbl">BB</span><input type="number" id="pBB" value="23" min="5" max="100">
+  <span class="lbl">편차</span><input type="number" id="pDev" value="2.96" min="0.5" max="5" step="0.01">
+  <span class="lbl">EMA</span><input type="number" id="pEma" value="194" min="20" max="400">
+  <span class="lbl">손절×ATR</span><input type="number" id="pStop" value="3.19" min="0.5" max="10" step="0.01">
+  <button id="applyBtn">파라미터 적용</button>
+</div>
+
+<div id="err"></div>
+
+<div class="grid">
+  <div class="card"><div class="label">현재가 (마지막 봉)</div><div class="value" id="vPrice">—</div></div>
+  <div class="card flat" id="sigCard"><div class="label">신호 상태</div><div class="value" id="vSignal">대기</div></div>
+  <div class="card"><div class="label">상단 밴드</div><div class="value" id="vUpper">—</div></div>
+  <div class="card"><div class="label">중간 밴드 (청산선)</div><div class="value" id="vMid">—</div></div>
+  <div class="card"><div class="label">하단 밴드</div><div class="value" id="vLower">—</div></div>
+  <div class="card"><div class="label">추세 EMA</div><div class="value" id="vEma">—</div></div>
+  <div class="card"><div class="label">ATR 14</div><div class="value" id="vAtr">—</div></div>
+  <div class="card"><div class="label">손절가 (포지션)</div><div class="value" id="vStop">—</div></div>
+</div>
+
+<div id="chart"></div>
+
+<div class="row">
+  <div class="panel">
+    <h2>신호 로그 (최신순 · 미국 동부시간 ET)</h2>
+    <div id="log"></div>
+  </div>
+  <div class="panel">
+    <h2>로딩된 기간 시뮬레이션 (참고용 · 수수료 미반영)</h2>
+    <table>
+      <tr><td>종목 / 분봉</td><td id="sSym">—</td></tr>
+      <tr><td>기간</td><td id="sPeriod">—</td></tr>
+      <tr><td>총 트레이드</td><td id="sTrades">—</td></tr>
+      <tr><td>승률</td><td id="sWin">—</td></tr>
+      <tr><td>평균 손익비 (W/L)</td><td id="sRatio">—</td></tr>
+      <tr><td>누적 손익 (단리 합산)</td><td id="sPnl">—</td></tr>
+    </table>
+  </div>
+</div>
+
+<footer>
+  · 진입(봉 마감 기준): 종가 > 상단밴드 + 종가 > EMA → 롱 / 종가 < 하단밴드 + 종가 < EMA → 숏 · 청산: 중간밴드 반대편 이탈 또는 진입가 ± 배수×ATR 손절<br>
+  · 데이터: Massive.com REST API 30초 폴링 (프리·애프터마켓 포함). 플랜이 15분 지연이면 신호도 그만큼 늦습니다 — 상단 지연 배지를 확인하세요.<br>
+  · API 키는 접속한 브라우저의 localStorage에만 저장됩니다. 모니터링 전용이며 자동 주문하지 않습니다. 투자 판단의 책임은 본인에게 있습니다.
+</footer>
+
+<script>
+'use strict';
+// ===== 설정 =====
+const KEY_STORE = 'massive_api_key';
+let API_KEY = localStorage.getItem(KEY_STORE) || '';
+const REST_HOSTS = ['https://api.massive.com', 'https://api.polygon.io'];
+const POLL_MS = 30000;
+const WATCHLIST = ['SPY', 'QQQ', 'NVDA', 'TSLA', 'AAPL'];
+const HISTORY_DAYS = { 5: 12, 15: 30, 30: 60 }; // EMA 194 워밍업 충분량
+const ATR_PERIOD = 14;
+const NY = 'America/New_York';
+
+// 전략 파라미터 (UI에서 변경 가능)
+let P = { bb: 23, dev: 2.96, ema: 194, stop: 3.19 };
+let SYMBOL = 'SPY';
+let TF = 30; // 분
+
+let candles = [];
+let ema = [], bbUp = [], bbMid = [], bbLow = [], atr = [];
+let position = null;
+let markers = [];
+let trades = [];
+let lastEvalTime = 0;
+let fetchSeq = 0;
+
+const $ = id => document.getElementById(id);
+const fmt = (v, d = 2) => v == null || isNaN(v) ? '—' : Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+// ===== 시간대 (ET 표시) =====
+function etOffsetSec(ms) {
+  const d = new Date(ms);
+  const et = new Date(d.toLocaleString('en-US', { timeZone: NY }));
+  return Math.round((et - d) / 1000);
+}
+const fmtET = sec => new Date(sec * 1000).toLocaleString('en-US', { timeZone: NY, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+const nyDateStr = ms => new Date(ms).toLocaleDateString('en-CA', { timeZone: NY });
+
+// ===== 지표 계산 =====
+function computeEMA(closes, p) {
+  const out = new Array(closes.length).fill(null);
+  if (closes.length < p) return out;
+  let sum = 0;
+  for (let i = 0; i < p; i++) sum += closes[i];
+  out[p - 1] = sum / p;
+  const k = 2 / (p + 1);
+  for (let i = p; i < closes.length; i++) out[i] = closes[i] * k + out[i - 1] * (1 - k);
+  return out;
+}
+function computeBB(closes, p, dev) {
+  const up = new Array(closes.length).fill(null), mid = up.slice(), low = up.slice();
+  for (let i = p - 1; i < closes.length; i++) {
+    let sum = 0;
+    for (let j = i - p + 1; j <= i; j++) sum += closes[j];
+    const m = sum / p;
+    let v = 0;
+    for (let j = i - p + 1; j <= i; j++) v += (closes[j] - m) ** 2;
+    const sd = Math.sqrt(v / p);
+    mid[i] = m; up[i] = m + dev * sd; low[i] = m - dev * sd;
+  }
+  return { up, mid, low };
+}
+function computeATR(cs, p) {
+  const out = new Array(cs.length).fill(null);
+  if (cs.length < p + 1) return out;
+  const trs = [];
+  for (let i = 1; i < cs.length; i++) {
+    trs.push(Math.max(cs[i].high - cs[i].low, Math.abs(cs[i].high - cs[i - 1].close), Math.abs(cs[i].low - cs[i - 1].close)));
+  }
+  let a = trs.slice(0, p).reduce((s, x) => s + x, 0) / p;
+  out[p] = a;
+  for (let i = p; i < trs.length; i++) { a = (a * (p - 1) + trs[i]) / p; out[i + 1] = a; }
+  return out;
+}
+function recompute() {
+  const closes = candles.map(c => c.close);
+  ema = computeEMA(closes, P.ema);
+  const bb = computeBB(closes, P.bb, P.dev);
+  bbUp = bb.up; bbMid = bb.mid; bbLow = bb.low;
+  atr = computeATR(candles, ATR_PERIOD);
+}
+
+// ===== 차트 =====
+const chart = LightweightCharts.createChart($('chart'), {
+  layout: { background: { color: '#0d1117' }, textColor: '#8b949e' },
+  grid: { vertLines: { color: '#1c2128' }, horzLines: { color: '#1c2128' } },
+  timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#2d333b' },
+  rightPriceScale: { borderColor: '#2d333b' },
+  crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+});
+const candleSeries = chart.addCandlestickSeries({ upColor: '#26a269', downColor: '#e5534b', borderVisible: false, wickUpColor: '#26a269', wickDownColor: '#e5534b' });
+const upSeries = chart.addLineSeries({ color: 'rgba(68,147,248,0.7)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+const midSeries = chart.addLineSeries({ color: 'rgba(212,167,44,0.8)', lineWidth: 1, lineStyle: 1, priceLineVisible: false, lastValueVisible: false });
+const lowSeries = chart.addLineSeries({ color: 'rgba(68,147,248,0.7)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+const emaSeries = chart.addLineSeries({ color: '#c678dd', lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
+new ResizeObserver(() => chart.applyOptions({ width: $('chart').clientWidth })).observe($('chart'));
+
+const chartT = sec => sec + etOffsetSec(sec * 1000);
+function redrawChart() {
+  candleSeries.setData(candles.map(c => ({ time: chartT(c.time), open: c.open, high: c.high, low: c.low, close: c.close })));
+  const line = arr => candles.map((c, i) => arr[i] == null ? null : { time: chartT(c.time), value: arr[i] }).filter(Boolean);
+  upSeries.setData(line(bbUp)); midSeries.setData(line(bbMid)); lowSeries.setData(line(bbLow)); emaSeries.setData(line(ema));
+  candleSeries.setMarkers(markers);
+}
+
+// ===== 시그널 로직 =====
+function addMarker(timeSec, side, text) {
+  markers.push({
+    time: chartT(timeSec),
+    position: side === 'long' ? 'belowBar' : 'aboveBar',
+    color: side === 'long' ? '#26a269' : side === 'short' ? '#e5534b' : '#d4a72c',
+    shape: side === 'long' ? 'arrowUp' : side === 'short' ? 'arrowDown' : 'circle',
+    text,
+  });
+}
+function openPosition(side, c, i, live) {
+  const stop = side === 'long' ? c.close - P.stop * atr[i] : c.close + P.stop * atr[i];
+  position = { side, entry: c.close, stop, entryTime: c.time };
+  addMarker(c.time, side, side === 'long' ? '롱' : '숏');
+  logEntry(c.time, side, `${SYMBOL} ${side === 'long' ? '롱' : '숏'} 진입 @ ${fmt(c.close)} (손절 ${fmt(stop)})`, live);
+  if (live) notify(`${SYMBOL} ${side === 'long' ? '롱' : '숏'} 진입 신호`, `진입 ${fmt(c.close)} / 손절 ${fmt(stop)}`);
+}
+function closePosition(price, timeSec, reason, live) {
+  const p = position;
+  const pnl = (p.side === 'long' ? price - p.entry : p.entry - price) / p.entry * 100;
+  trades.push({ side: p.side, pnl });
+  addMarker(timeSec, 'exit', '청산');
+  const tag = reason === '손절' ? 'stop' : 'exit';
+  logEntry(timeSec, tag, `${SYMBOL} ${p.side === 'long' ? '롱' : '숏'} 청산 (${reason}) @ ${fmt(price)} → ${pnl >= 0 ? '+' : ''}${fmt(pnl)}%`, live);
+  if (live) notify(`${SYMBOL} 포지션 청산 (${reason})`, `${fmt(price)} / ${pnl >= 0 ? '+' : ''}${fmt(pnl)}%`);
+  position = null;
+}
+function evaluateAt(i, live) {
+  if (i < P.ema || ema[i] == null || bbUp[i] == null || atr[i] == null) return;
+  const c = candles[i];
+  if (position) {
+    if (position.side === 'long' && c.low <= position.stop) closePosition(position.stop, c.time, '손절', live);
+    else if (position.side === 'short' && c.high >= position.stop) closePosition(position.stop, c.time, '손절', live);
+    else if (position.side === 'long' && c.close < bbMid[i]) closePosition(c.close, c.time, '중간밴드 이탈', live);
+    else if (position.side === 'short' && c.close > bbMid[i]) closePosition(c.close, c.time, '중간밴드 이탈', live);
+  }
+  if (!position) {
+    if (c.close > bbUp[i] && c.close > ema[i]) openPosition('long', c, i, live);
+    else if (c.close < bbLow[i] && c.close < ema[i]) openPosition('short', c, i, live);
+  }
+}
+const isFinalBar = c => (c.time + TF * 60) * 1000 <= Date.now();
+
+// ===== UI =====
+function logEntry(timeSec, tag, text, live) {
+  const log = $('log');
+  const div = document.createElement('div');
+  div.className = 'entry';
+  const cls = tag === 'long' ? 'long' : tag === 'short' ? 'short' : tag === 'stop' ? 'stop' : 'exit';
+  const label = tag === 'long' ? 'LONG' : tag === 'short' ? 'SHORT' : tag === 'stop' ? 'STOP' : 'EXIT';
+  div.innerHTML = `<span class="t">${fmtET(timeSec)} ET</span><span class="tag ${cls}">${label}</span><span>${text}</span>`;
+  log.insertBefore(div, log.firstChild);
+  while (log.children.length > 80) log.removeChild(log.lastChild);
+  if (live) { document.title = '🔔 ' + document.title.replace(/^🔔 /, ''); beep(); }
+}
+function updatePanel() {
+  const i = candles.length - 1;
+  if (i < 0) return;
+  $('vPrice').textContent = fmt(candles[i].close);
+  $('vUpper').textContent = fmt(bbUp[i]);
+  $('vMid').textContent = fmt(bbMid[i]);
+  $('vLower').textContent = fmt(bbLow[i]);
+  $('vEma').textContent = fmt(ema[i]);
+  $('vAtr').textContent = fmt(atr[i]);
+  const card = $('sigCard');
+  if (position) {
+    card.className = 'card ' + position.side;
+    $('vSignal').textContent = (position.side === 'long' ? '롱 보유' : '숏 보유') + ` @ ${fmt(position.entry)}`;
+    $('vStop').textContent = fmt(position.stop);
+  } else {
+    card.className = 'card flat';
+    $('vSignal').textContent = '대기 (무포지션)';
+    $('vStop').textContent = '—';
+  }
+}
+function updateStats() {
+  $('sSym').textContent = `${SYMBOL} / ${TF}분봉`;
+  if (!candles.length) {
+    $('sPeriod').textContent = '—'; $('sTrades').textContent = '—';
+    $('sWin').textContent = '—'; $('sRatio').textContent = '—';
+    $('sPnl').textContent = '—'; $('sPnl').className = '';
+    return;
+  }
+  $('sPeriod').textContent = `${fmtET(candles[0].time)} ~ 현재 (ET)`;
+  $('sTrades').textContent = trades.length + ' 회';
+  if (trades.length) {
+    const wins = trades.filter(t => t.pnl > 0);
+    const losses = trades.filter(t => t.pnl <= 0);
+    $('sWin').textContent = fmt(wins.length / trades.length * 100, 1) + ' %';
+    const aw = wins.length ? wins.reduce((s, t) => s + t.pnl, 0) / wins.length : 0;
+    const al = losses.length ? Math.abs(losses.reduce((s, t) => s + t.pnl, 0) / losses.length) : 0;
+    $('sRatio').textContent = al > 0 ? fmt(aw / al) : '—';
+    const cum = trades.reduce((s, t) => s + t.pnl, 0);
+    const el = $('sPnl');
+    el.textContent = (cum >= 0 ? '+' : '') + fmt(cum) + ' %';
+    el.className = cum >= 0 ? 'pos' : 'neg';
+  } else {
+    $('sWin').textContent = '—'; $('sRatio').textContent = '—';
+    $('sPnl').textContent = '0 %'; $('sPnl').className = '';
+  }
+}
+function updateDelayBadge(marketOpen) {
+  const el = $('delayBadge');
+  const last = candles[candles.length - 1];
+  if (!last) { el.textContent = '데이터 없음'; return; }
+  if (!marketOpen) { el.textContent = '장 마감 (지연 측정 보류)'; el.className = 'badge'; return; }
+  const delayMin = Math.max(0, Math.round((Date.now() - (last.time + TF * 60) * 1000) / 60000));
+  el.textContent = `데이터 지연 약 ${delayMin}분`;
+  el.className = delayMin >= 5 ? 'badge warn' : 'badge';
+}
+
+// ===== 알림 =====
+$('notifChk').addEventListener('change', e => {
+  if (e.target.checked && Notification.permission !== 'granted') {
+    Notification.requestPermission().then(p => { if (p !== 'granted') e.target.checked = false; });
+  }
+});
+function notify(title, body) {
+  if ($('notifChk').checked && Notification.permission === 'granted') new Notification(title, { body });
+}
+let audioCtx;
+function beep() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.connect(g); g.connect(audioCtx.destination);
+    o.frequency.value = 880; g.gain.value = 0.08;
+    o.start(); o.stop(audioCtx.currentTime + 0.18);
+  } catch (e) { /* 사용자 인터랙션 전이면 무시 */ }
+}
+
+// ===== Massive API =====
+async function apiGet(path, params = {}) {
+  const qs = new URLSearchParams({ ...params, apiKey: API_KEY }).toString();
+  let lastErr;
+  for (const host of REST_HOSTS) {
+    try {
+      const r = await fetch(`${host}${path}?${qs}`);
+      if (r.status === 401 || r.status === 403) throw new Error('API 키 인증 실패 — 🔑 버튼으로 키를 다시 입력하세요');
+      if (r.status === 429) throw new Error('요청 한도 초과(429) — 잠시 후 재시도');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return await r.json();
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr;
+}
+async function fetchBars(symbol, minutes, days) {
+  const end = nyDateStr(Date.now());
+  const start = nyDateStr(Date.now() - days * 86400000);
+  const data = await apiGet(`/v2/aggs/ticker/${symbol}/range/${minutes}/minute/${start}/${end}`,
+    { adjusted: 'true', sort: 'asc', limit: 50000 });
+  return (data.results || []).map(k => ({ time: Math.floor(k.t / 1000), open: k.o, high: k.h, low: k.l, close: k.c }));
+}
+async function fetchMarketStatus() {
+  try {
+    const s = await apiGet('/v1/marketstatus/now');
+    const dot = $('mktDot');
+    const open = s.market === 'open';
+    const ext = s.market === 'extended-hours';
+    dot.className = open ? 'open' : ext ? 'ext' : '';
+    $('mktText').textContent = open ? '정규장 진행 중' : ext ? '프리/애프터마켓' : '장 마감';
+    return open || ext;
+  } catch (e) { $('mktText').textContent = '시장상태 조회 실패'; return false; }
+}
+
+// ===== 로딩 / 시뮬레이션 / 폴링 =====
+function resetState() {
+  candles = []; trades = []; markers = []; position = null; lastEvalTime = 0;
+  $('log').innerHTML = '';
+}
+function simulateAll(live) {
+  trades = []; markers = []; position = null;
+  recompute();
+  for (let i = 0; i < candles.length; i++) {
+    if (!isFinalBar(candles[i])) break;
+    evaluateAt(i, live);
+    lastEvalTime = candles[i].time;
+  }
+}
+async function loadSymbol() {
+  if (!API_KEY) { showKeyBox(); return; }
+  const seq = ++fetchSeq;
+  const err = $('err'); err.style.display = 'none';
+  $('updBadge').textContent = `${SYMBOL} 불러오는 중…`;
+  resetState();
+  try {
+    const bars = await fetchBars(SYMBOL, TF, HISTORY_DAYS[TF]);
+    if (seq !== fetchSeq) return;
+    if (!bars.length) throw new Error('데이터 없음 — 티커를 확인하세요');
+    candles = bars;
+    simulateAll(false);
+    redrawChart(); updatePanel(); updateStats();
+    chart.timeScale().scrollToRealTime();
+    const open = await fetchMarketStatus();
+    updateDelayBadge(open);
+    $('updBadge').textContent = '갱신: ' + new Date().toLocaleTimeString('ko-KR', { hour12: false });
+  } catch (e) {
+    if (seq !== fetchSeq) return;
+    err.style.display = 'block';
+    err.textContent = `${SYMBOL} 데이터를 불러오지 못했습니다: ${e.message}`;
+    $('updBadge').textContent = '로드 실패';
+  }
+}
+async function poll() {
+  if (!API_KEY || !candles.length) return;
+  const seq = fetchSeq;
+  try {
+    const recent = await fetchBars(SYMBOL, TF, 4);
+    if (seq !== fetchSeq || !recent.length) return;
+    const cutoff = recent[0].time;
+    candles = candles.filter(c => c.time < cutoff).concat(recent);
+    recompute();
+    for (let i = 0; i < candles.length; i++) {
+      const c = candles[i];
+      if (c.time <= lastEvalTime || !isFinalBar(c)) continue;
+      evaluateAt(i, true);
+      lastEvalTime = c.time;
+    }
+    redrawChart(); updatePanel(); updateStats();
+    const open = await fetchMarketStatus();
+    updateDelayBadge(open);
+    $('updBadge').textContent = '갱신: ' + new Date().toLocaleTimeString('ko-KR', { hour12: false });
+  } catch (e) {
+    $('updBadge').textContent = '갱신 실패: ' + e.message;
+  }
+}
+
+// ===== API 키 입력 =====
+function showKeyBox() {
+  $('keyBox').classList.add('show');
+  $('keyInput').focus();
+}
+$('keySaveBtn').addEventListener('click', () => {
+  const k = $('keyInput').value.trim();
+  if (!k) return;
+  API_KEY = k;
+  localStorage.setItem(KEY_STORE, k);
+  $('keyBox').classList.remove('show');
+  $('keyInput').value = '';
+  loadSymbol();
+});
+$('keyInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('keySaveBtn').click(); });
+$('keyChangeBtn').addEventListener('click', () => { $('keyInput').value = API_KEY; showKeyBox(); });
+
+// ===== 이벤트 =====
+$('loadBtn').addEventListener('click', () => {
+  const s = $('symInput').value.trim().toUpperCase();
+  if (s) { SYMBOL = s; loadSymbol(); }
+});
+$('symInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('loadBtn').click(); });
+WATCHLIST.forEach(s => {
+  const b = document.createElement('button');
+  b.textContent = s;
+  b.addEventListener('click', () => { SYMBOL = s; $('symInput').value = s; loadSymbol(); });
+  $('quickBtns').appendChild(b);
+});
+document.querySelectorAll('.tfBtn').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.tfBtn').forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+  TF = +b.dataset.tf;
+  loadSymbol();
+}));
+$('applyBtn').addEventListener('click', () => {
+  P = { bb: +$('pBB').value, dev: +$('pDev').value, ema: +$('pEma').value, stop: +$('pStop').value };
+  $('log').innerHTML = '';
+  lastEvalTime = 0;
+  simulateAll(false);
+  redrawChart(); updatePanel(); updateStats();
+});
+
+// ===== 시작 =====
+if (API_KEY) loadSymbol(); else showKeyBox();
+setInterval(poll, POLL_MS);
+</script>
+</body>
+</html>
