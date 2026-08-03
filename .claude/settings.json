@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git fetch:*)",
+      "Bash(git pull:*)",
+      "Bash(python -m http.server:*)",
+      "Bash(npx serve:*)",
+      "Read(//home/user/us-stock-monitor/**)",
+      "WebFetch(domain:unpkg.com)"
+    ],
+    "deny": []
+  }
+}
