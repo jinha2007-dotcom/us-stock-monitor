@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>사회복지법인 한밀 — 후원(모금) 브로슈어</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --green:#2f9e3f;
+    --green-deep:#20802f;
+    --green-light:#e8f5e9;
+    --yellow:#f6b40e;
+    --yellow-deep:#e09b00;
+    --yellow-light:#fdf3d7;
+    --ink:#222;
+    --ink-soft:#555;
+    --paper:#fff;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{font-family:'Noto Sans KR',sans-serif;color:var(--ink);-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+
+  /* ===== 시트(A4 가로) / 3단 패널 ===== */
+  .sheet{
+    width:297mm;height:210mm;
+    background:var(--paper);
+    display:flex;
+    overflow:hidden;
+    position:relative;
+    page-break-after:always;
+  }
+  .panel{
+    width:99mm;height:210mm;
+    position:relative;
+    overflow:hidden;
+    display:flex;flex-direction:column;
+  }
+
+  /* 화면 미리보기 전용 */
+  @media screen{
+    body{background:#4a4a4a;padding:24px;}
+    .sheet{margin:0 auto 28px;box-shadow:0 10px 40px rgba(0,0,0,.45);}
+    .panel + .panel{border-left:1px dashed rgba(0,0,0,.18);}
+    .screen-label{display:block;max-width:297mm;margin:0 auto 8px;color:#eee;font-size:13px;font-weight:500;}
+  }
+  @media print{
+    .screen-label{display:none;}
+    body{background:none;}
+  }
+  @page{size:A4 landscape;margin:0;}
+
+  /* ===== 공통 요소 ===== */
+  .logo{display:flex;align-items:center;gap:3mm;}
+  .logo svg{display:block;}
+  .logo .logo-name{font-weight:900;letter-spacing:.5mm;}
+  .logo .logo-sub{font-size:.62em;font-weight:500;letter-spacing:.8mm;display:block;}
+
+  .tri{position:absolute;pointer-events:none;}
+
+  /* ===== [겉면] 패널1 — 한밀의 CI / 후원 문구 ===== */
+  .p-ci{background:var(--paper);padding:16mm 11mm;justify-content:space-between;}
+  .p-ci .tri-top{top:0;left:0;border-left:99mm solid transparent;border-top:26mm solid var(--yellow-light);}
+  .ci-title{font-size:19pt;font-weight:900;color:var(--green-deep);display:flex;align-items:center;gap:4mm;position:relative;}
+  .ci-body{font-size:10.5pt;line-height:1.9;color:var(--ink-soft);margin-top:8mm;word-break:keep-all;}
+  .ci-body b{color:var(--green-deep);}
+  .ci-keywords{display:flex;gap:3mm;margin-top:8mm;}
+  .ci-keywords span{
+    flex:1;text-align:center;padding:3.2mm 0;border-radius:99mm;
+    font-size:9.5pt;font-weight:700;color:#fff;background:var(--green);
+  }
+  .ci-keywords span:nth-child(2){background:var(--yellow-deep);}
+  .ci-keywords span:nth-child(3){background:var(--green-deep);}
+  .ci-bottom{background:var(--yellow-light);border-radius:3mm;padding:7mm 6mm;text-align:center;word-break:keep-all;}
+  .ci-bottom .accent{color:#d0021b;font-weight:900;}
+  .ci-bottom p{font-size:11.5pt;font-weight:700;line-height:1.75;}
+
+  /* ===== [겉면] 패널2 — 오시는 길 / 연락처 ===== */
+  .p-map{background:var(--yellow);padding:14mm 10mm;color:var(--ink);}
+  .p-map .tri-bl{bottom:0;left:0;border-right:99mm solid transparent;border-bottom:30mm solid var(--yellow-deep);opacity:.35;}
+  .map-title{font-size:17pt;font-weight:900;color:#fff;background:var(--green-deep);display:inline-block;align-self:flex-start;padding:2.5mm 6mm;border-radius:2mm;position:relative;}
+  .map-list{margin-top:9mm;display:flex;flex-direction:column;gap:5.5mm;position:relative;}
+  .map-item{background:rgba(255,255,255,.92);border-radius:2.5mm;padding:4mm 5mm;}
+  .map-item .k{font-size:9pt;font-weight:900;color:var(--green-deep);display:block;margin-bottom:1mm;}
+  .map-item .v{font-size:10pt;font-weight:500;line-height:1.6;word-break:keep-all;}
+  .map-qr{margin-top:7mm;background:#fff;border-radius:2.5mm;padding:4.5mm;display:flex;align-items:center;gap:5mm;position:relative;}
+  .map-qr svg{width:24mm;height:24mm;flex:none;}
+  .map-qr .q-txt{font-size:9.5pt;font-weight:700;line-height:1.7;word-break:keep-all;}
+  .map-qr .q-txt small{display:block;font-size:8.5pt;font-weight:500;color:var(--ink-soft);}
+
+  /* ===== [겉면] 패널3 — 앞표지 ===== */
+  .p-cover{background:var(--green);color:#fff;padding:16mm 11mm;justify-content:space-between;}
+  .p-cover .tri-tr{top:0;right:0;border-left:60mm solid transparent;border-top:52mm solid var(--green-deep);opacity:.55;}
+  .p-cover .tri-br{bottom:0;right:0;border-top:70mm solid transparent;border-right:80mm solid var(--yellow);}
+  .cover-org{font-size:12pt;font-weight:700;letter-spacing:1mm;position:relative;}
+  .cover-main{position:relative;}
+  .cover-main .quote{font-size:23pt;font-weight:900;line-height:1.5;color:#fff600;word-break:keep-all;}
+  .cover-main .quote .w{color:#fff;}
+  .cover-main .lead{margin-top:9mm;font-size:12pt;font-weight:500;line-height:1.8;word-break:keep-all;}
+  .cover-badge{position:relative;align-self:flex-start;background:#fff;color:var(--green-deep);font-size:11pt;font-weight:900;padding:3mm 7mm;border-radius:99mm;}
+  .cover-logo{position:absolute;right:9mm;bottom:9mm;text-align:right;}
+
+  /* ===== [속면] 패널1 — 인사말 ===== */
+  .p-greet{background:var(--green);color:#fff;padding:15mm 11mm;}
+  .p-greet .tri-b{bottom:0;left:0;border-right:99mm solid transparent;border-bottom:34mm solid var(--green-deep);opacity:.5;}
+  .greet-title{font-size:19pt;font-weight:900;position:relative;}
+  .greet-quote{margin-top:8mm;font-size:15.5pt;font-weight:900;line-height:1.6;color:#fff600;word-break:keep-all;position:relative;}
+  .greet-body{margin-top:8mm;font-size:10.5pt;line-height:2.0;word-break:keep-all;position:relative;}
+  .greet-sign{margin-top:auto;text-align:right;font-size:11pt;font-weight:700;position:relative;}
+  .greet-sign b{font-size:14pt;font-weight:900;margin-left:2.5mm;}
+
+  /* ===== [속면] 패널2 — 복지사업 / 산하시설 ===== */
+  .p-biz{background:var(--paper);padding:14mm 9mm;justify-content:space-between;}
+  .biz-title{font-size:16pt;font-weight:900;color:var(--green-deep);text-align:center;}
+  .biz-title small{display:block;font-size:9pt;font-weight:500;color:var(--ink-soft);margin-top:1mm;letter-spacing:.5mm;}
+  .biz-list{margin-top:6mm;display:flex;flex-direction:column;gap:4mm;}
+  .biz-item{border:.5mm solid var(--green-light);border-left:2.5mm solid var(--green);border-radius:2mm;padding:3.5mm 4.5mm;}
+  .biz-item:nth-child(2){border-left-color:var(--yellow);}
+  .biz-item:nth-child(3){border-left-color:var(--green-deep);}
+  .biz-item .k{font-size:11.5pt;font-weight:900;color:var(--ink);}
+  .biz-item .v{font-size:9.5pt;color:var(--ink-soft);margin-top:1mm;line-height:1.6;word-break:keep-all;}
+  .fac-title{margin-top:7mm;font-size:12pt;font-weight:900;color:#fff;background:var(--yellow-deep);text-align:center;padding:2.5mm 0;border-radius:2mm;}
+  .fac-grid{margin-top:4mm;display:grid;grid-template-columns:1fr 1fr;gap:2.5mm;}
+  .fac-grid span{
+    background:var(--green-light);border-radius:1.8mm;
+    font-size:9pt;font-weight:700;color:var(--green-deep);
+    text-align:center;padding:3mm 1mm;word-break:keep-all;
+  }
+  .fac-grid span.wide{grid-column:1 / -1;}
+  .fac-grid span{padding:3.6mm 1mm;}
+
+  /* ===== [속면] 패널3 — 모금 캠페인 / 후원계좌 ===== */
+  .p-fund{background:var(--paper);padding:14mm 9mm;justify-content:space-between;}
+  .fund-head{background:var(--green);color:#fff;border-radius:3mm;padding:7mm 6mm;text-align:center;position:relative;overflow:hidden;}
+  .fund-head .tri-fh{top:0;right:0;border-left:34mm solid transparent;border-top:16mm solid var(--green-deep);opacity:.5;}
+  .fund-head .t1{font-size:14.5pt;font-weight:900;position:relative;}
+  .fund-head .t2{margin-top:3.5mm;font-size:12pt;font-weight:700;line-height:1.65;word-break:keep-all;position:relative;}
+  .fund-head .t2 u{color:#fff600;text-underline-offset:1.2mm;}
+  .fund-body{margin-top:5mm;font-size:10pt;line-height:1.85;color:var(--ink-soft);text-align:center;word-break:keep-all;}
+  .fund-body b{color:var(--ink);}
+  .fund-account{margin-top:5mm;background:var(--yellow-light);border:.6mm solid var(--yellow);border-radius:3mm;padding:5mm;text-align:center;}
+  .fund-account .k{font-size:10pt;font-weight:900;color:var(--yellow-deep);letter-spacing:1mm;}
+  .fund-account .bank{margin-top:2mm;font-size:14.5pt;font-weight:900;}
+  .fund-account .owner{margin-top:1mm;font-size:10pt;font-weight:500;color:var(--ink-soft);}
+  .fund-regular{margin-top:5mm;display:flex;align-items:center;gap:5mm;background:var(--green-light);border-radius:3mm;padding:4.5mm 5mm;}
+  .fund-regular svg{width:22mm;height:22mm;flex:none;background:#fff;padding:1.5mm;border-radius:1.5mm;}
+  .fund-regular .r-txt{font-size:9.5pt;font-weight:700;line-height:1.7;word-break:keep-all;}
+  .fund-regular .r-txt small{display:block;font-weight:500;font-size:8.5pt;color:var(--ink-soft);}
+  .fund-cta{margin-top:5mm;text-align:center;font-size:12.5pt;font-weight:900;color:var(--green-deep);word-break:keep-all;}
+</style>
+</head>
+<body>
+
+<p class="screen-label">① 겉면 — 접었을 때 [날개(CI) | 뒷면(오시는 길) | 앞표지]</p>
+
+<!-- ================= 겉면 ================= -->
+<section class="sheet">
+
+  <!-- 날개: 한밀의 CI -->
+  <div class="panel p-ci">
+    <span class="tri tri-top"></span>
+    <div>
+      <h2 class="ci-title">
+        <svg width="44" height="44" viewBox="0 0 40 40" aria-hidden="true">
+          <path d="M19 37C7 31 5 15 13 4c11 6 13 24 6 33z" fill="#2f9e3f"/>
+          <path d="M22 37c-4-9-1-22 9-27 5 11 0 23-9 27z" fill="#f6b40e"/>
+        </svg>
+        한밀의 CI
+      </h2>
+      <p class="ci-body">
+        어떤 일에 작은 <b>밑거름</b>이 되는 <b>밀알의 모양</b>처럼,<br>
+        사람을 연결하고 연대하며 함께하고 사랑하는 가치를 담아
+        복지사업을 실천하는 <b>소중한 밑거름</b>이 되겠다는 의미를 담고 있습니다.
+      </p>
+      <div class="ci-keywords">
+        <span>연결</span><span>연대</span><span>함께 · 사랑</span>
+      </div>
+    </div>
+    <div class="ci-bottom">
+      <p>여러분의 <span class="accent">따스한 후원</span><br>
+      우리의 아동 &amp; 이웃에게<br>
+      <span class="accent">소중한 디딤돌</span>이 됩니다</p>
+    </div>
+  </div>
+
+  <!-- 뒷표지: 오시는 길 -->
+  <div class="panel p-map">
+    <span class="tri tri-bl"></span>
+    <h2 class="map-title">오시는 길</h2>
+    <div class="map-list">
+      <div class="map-item">
+        <span class="k">주소</span>
+        <span class="v">(08828) 서울시 관악구 신림로36길 27-11</span>
+      </div>
+      <div class="map-item">
+        <span class="k">지하철</span>
+        <span class="v">신림선 서원역 2번 출구 (도보 10분)</span>
+      </div>
+      <div class="map-item">
+        <span class="k">버스</span>
+        <span class="v">쑥고개입구 · 서림동주민센터 정류장 하차</span>
+      </div>
+      <div class="map-item">
+        <span class="k">연락처</span>
+        <span class="v">Tel. 02) 872-6677<br>Fax. 02) 872-6678</span>
+      </div>
+    </div>
+    <div class="map-qr">
+      <svg viewBox="0 0 25 25" shape-rendering="crispEdges" aria-label="한밀 홈페이지 QR코드"><path d="M0 0h7v1h-7zM9 0h1v1h-1zM11 0h1v1h-1zM14 0h1v1h-1zM18 0h7v1h-7zM0 1h1v1h-1zM6 1h1v1h-1zM8 1h1v1h-1zM10 1h3v1h-3zM14 1h1v1h-1zM16 1h1v1h-1zM18 1h1v1h-1zM24 1h1v1h-1zM0 2h1v1h-1zM2 2h3v1h-3zM6 2h1v1h-1zM8 2h1v1h-1zM10 2h1v1h-1zM15 2h1v1h-1zM18 2h1v1h-1zM20 2h3v1h-3zM24 2h1v1h-1zM0 3h1v1h-1zM2 3h3v1h-3zM6 3h1v1h-1zM8 3h2v1h-2zM11 3h3v1h-3zM15 3h2v1h-2zM18 3h1v1h-1zM20 3h3v1h-3zM24 3h1v1h-1zM0 4h1v1h-1zM2 4h3v1h-3zM6 4h1v1h-1zM9 4h1v1h-1zM13 4h1v1h-1zM16 4h1v1h-1zM18 4h1v1h-1zM20 4h3v1h-3zM24 4h1v1h-1zM0 5h1v1h-1zM6 5h1v1h-1zM9 5h2v1h-2zM12 5h1v1h-1zM14 5h1v1h-1zM16 5h1v1h-1zM18 5h1v1h-1zM24 5h1v1h-1zM0 6h7v1h-7zM8 6h1v1h-1zM10 6h1v1h-1zM12 6h1v1h-1zM14 6h1v1h-1zM16 6h1v1h-1zM18 6h7v1h-7zM8 7h1v1h-1zM10 7h2v1h-2zM16 7h1v1h-1zM0 8h1v1h-1zM6 8h1v1h-1zM8 8h2v1h-2zM11 8h3v1h-3zM17 8h2v1h-2zM21 8h3v1h-3zM0 9h2v1h-2zM4 9h1v1h-1zM8 9h1v1h-1zM11 9h5v1h-5zM17 9h1v1h-1zM19 9h5v1h-5zM1 10h2v1h-2zM6 10h3v1h-3zM11 10h1v1h-1zM13 10h3v1h-3zM17 10h5v1h-5zM23 10h2v1h-2zM0 11h1v1h-1zM9 11h1v1h-1zM15 11h3v1h-3zM19 11h1v1h-1zM21 11h1v1h-1zM24 11h1v1h-1zM0 12h1v1h-1zM4 12h4v1h-4zM9 12h2v1h-2zM16 12h1v1h-1zM18 12h1v1h-1zM24 12h1v1h-1zM0 13h1v1h-1zM2 13h1v1h-1zM4 13h1v1h-1zM7 13h4v1h-4zM12 13h2v1h-2zM15 13h3v1h-3zM19 13h1v1h-1zM23 13h1v1h-1zM0 14h1v1h-1zM3 14h1v1h-1zM6 14h2v1h-2zM9 14h1v1h-1zM13 14h9v1h-9zM23 14h2v1h-2zM0 15h1v1h-1zM2 15h1v1h-1zM4 15h2v1h-2zM8 15h1v1h-1zM12 15h1v1h-1zM16 15h2v1h-2zM19 15h1v1h-1zM21 15h2v1h-2zM24 15h1v1h-1zM0 16h1v1h-1zM6 16h1v1h-1zM8 16h1v1h-1zM10 16h1v1h-1zM12 16h9v1h-9zM22 16h1v1h-1zM8 17h1v1h-1zM10 17h1v1h-1zM14 17h1v1h-1zM16 17h1v1h-1zM20 17h1v1h-1zM0 18h7v1h-7zM12 18h1v1h-1zM14 18h1v1h-1zM16 18h1v1h-1zM18 18h1v1h-1zM20 18h1v1h-1zM24 18h1v1h-1zM0 19h1v1h-1zM6 19h1v1h-1zM9 19h1v1h-1zM11 19h1v1h-1zM15 19h2v1h-2zM20 19h1v1h-1zM24 19h1v1h-1zM0 20h1v1h-1zM2 20h3v1h-3zM6 20h1v1h-1zM9 20h12v1h-12zM22 20h1v1h-1zM0 21h1v1h-1zM2 21h3v1h-3zM6 21h1v1h-1zM10 21h1v1h-1zM12 21h1v1h-1zM14 21h1v1h-1zM16 21h1v1h-1zM18 21h1v1h-1zM23 21h2v1h-2zM0 22h1v1h-1zM2 22h3v1h-3zM6 22h1v1h-1zM9 22h2v1h-2zM13 22h4v1h-4zM21 22h2v1h-2zM24 22h1v1h-1zM0 23h1v1h-1zM6 23h1v1h-1zM9 23h1v1h-1zM11 23h1v1h-1zM14 23h1v1h-1zM16 23h2v1h-2zM19 23h2v1h-2zM24 23h1v1h-1zM0 24h7v1h-7zM8 24h3v1h-3zM12 24h1v1h-1zM14 24h1v1h-1zM16 24h2v1h-2zM21 24h1v1h-1zM24 24h1v1h-1z" fill="#1a1a1a"/></svg>
+      <p class="q-txt">
+        홈페이지 www.hanmill.org
+        <small>스마트폰 카메라를 켜서 비춰 보세요^^</small>
+      </p>
+    </div>
+  </div>
+
+  <!-- 앞표지 -->
+  <div class="panel p-cover">
+    <span class="tri tri-tr"></span>
+    <span class="tri tri-br"></span>
+    <p class="cover-org">사회복지법인 한밀 · 후원 안내</p>
+    <div class="cover-main">
+      <p class="quote">“전 세계의<br>모든 사람들이<br><span class="w">행복할 때까지</span>”</p>
+      <p class="lead">저출산 · 불평등 문제 해결에 힘쓰는<br>복지사업을 실천합니다!</p>
+    </div>
+    <span class="cover-badge">당신의 후원이 내일을 바꿉니다</span>
+    <div class="cover-logo logo" style="color:#fff;">
+      <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
+        <path d="M19 37C7 31 5 15 13 4c11 6 13 24 6 33z" fill="#e8f5e9"/>
+        <path d="M22 37c-4-9-1-22 9-27 5 11 0 23-9 27z" fill="#f6b40e"/>
+      </svg>
+      <span class="logo-name" style="font-size:16pt;">한밀<span class="logo-sub">사회복지법인</span></span>
+    </div>
+  </div>
+
+</section>
+
+<p class="screen-label">② 속면 — 펼쳤을 때 [인사말 | 복지사업·산하시설 | 후원 안내]</p>
+
+<!-- ================= 속면 ================= -->
+<section class="sheet">
+
+  <!-- 인사말 -->
+  <div class="panel p-greet">
+    <span class="tri tri-b"></span>
+    <h2 class="greet-title">인사드립니다!</h2>
+    <p class="greet-quote">“전 세계의 모든 사람들이<br>행복할 때까지”</p>
+    <p class="greet-body">
+      사회복지법인 한밀은 사랑과 섬김의 정신을 바탕으로
+      사회복지 사업을 실천하고 있습니다.<br><br>
+      저출산, 불평등의 사회문제들이 급속히 진행되고 있는 만큼,
+      여러분과 함께 지역과 이웃의 행복에 기여하는
+      복지사업을 실천하겠습니다.
+    </p>
+    <p class="greet-sign">대표이사 <b>남정태</b></p>
+  </div>
+
+  <!-- 복지사업 + 산하시설 -->
+  <div class="panel p-biz">
+    <h2 class="biz-title">한밀이 실천하는 복지사업<small>HANMILL WELFARE PROGRAMS</small></h2>
+    <div class="biz-list">
+      <div class="biz-item">
+        <p class="k">아동복지사업</p>
+        <p class="v">보호아동 지원 · 출산아동 지원 · 다자녀아동 지원</p>
+      </div>
+      <div class="biz-item">
+        <p class="k">어르신복지사업</p>
+        <p class="v">인생이모작 지원 · 돌봄지원사업</p>
+      </div>
+      <div class="biz-item">
+        <p class="k">사회복지시설 위탁사업</p>
+        <p class="v">어린이집 및 어르신 복지시설 운영 지원</p>
+      </div>
+    </div>
+    <h3 class="fac-title">한밀과 함께하는 산하시설</h3>
+    <div class="fac-grid">
+      <span>백령노인문화센터</span>
+      <span>관악50플러스센터</span>
+      <span>원당어린이집</span>
+      <span>해온어린이집</span>
+      <span>도곡어린이집</span>
+      <span>목동어린이집</span>
+      <span class="wide">서울시중구재가노인복지기관</span>
+    </div>
+  </div>
+
+  <!-- 모금 캠페인 + 후원계좌 -->
+  <div class="panel p-fund">
+    <div class="fund-head">
+      <span class="tri tri-fh"></span>
+      <p class="t1">&lt;한밀이 함께합니다!!&gt;</p>
+      <p class="t2">저소득 어르신 돌봄지원을 위한<br><u>노인요양시설 건립</u>을<br>진행합니다!!</p>
+    </div>
+    <p class="fund-body">
+      저소득 어르신들이 경제적 어려움 없이<br>
+      <b>편안한 노후생활</b>을 보내실 수 있도록<br>
+      모든 분들의 <b>관심과 지원</b>이 필요합니다!
+    </p>
+    <div class="fund-account">
+      <p class="k">후 원 계 좌</p>
+      <p class="bank">하나은행 746-910023-41304</p>
+      <p class="owner">예금주 : 사회복지법인 한밀</p>
+    </div>
+    <div class="fund-regular">
+      <svg viewBox="0 0 25 25" shape-rendering="crispEdges" aria-label="정기후원 신청 QR코드"><path d="M0 0h7v1h-7zM9 0h1v1h-1zM11 0h1v1h-1zM14 0h1v1h-1zM18 0h7v1h-7zM0 1h1v1h-1zM6 1h1v1h-1zM8 1h1v1h-1zM10 1h3v1h-3zM14 1h1v1h-1zM16 1h1v1h-1zM18 1h1v1h-1zM24 1h1v1h-1zM0 2h1v1h-1zM2 2h3v1h-3zM6 2h1v1h-1zM8 2h1v1h-1zM10 2h1v1h-1zM15 2h1v1h-1zM18 2h1v1h-1zM20 2h3v1h-3zM24 2h1v1h-1zM0 3h1v1h-1zM2 3h3v1h-3zM6 3h1v1h-1zM8 3h2v1h-2zM11 3h3v1h-3zM15 3h2v1h-2zM18 3h1v1h-1zM20 3h3v1h-3zM24 3h1v1h-1zM0 4h1v1h-1zM2 4h3v1h-3zM6 4h1v1h-1zM9 4h1v1h-1zM13 4h1v1h-1zM16 4h1v1h-1zM18 4h1v1h-1zM20 4h3v1h-3zM24 4h1v1h-1zM0 5h1v1h-1zM6 5h1v1h-1zM9 5h2v1h-2zM12 5h1v1h-1zM14 5h1v1h-1zM16 5h1v1h-1zM18 5h1v1h-1zM24 5h1v1h-1zM0 6h7v1h-7zM8 6h1v1h-1zM10 6h1v1h-1zM12 6h1v1h-1zM14 6h1v1h-1zM16 6h1v1h-1zM18 6h7v1h-7zM8 7h1v1h-1zM10 7h2v1h-2zM16 7h1v1h-1zM0 8h1v1h-1zM6 8h1v1h-1zM8 8h2v1h-2zM11 8h3v1h-3zM17 8h2v1h-2zM21 8h3v1h-3zM0 9h2v1h-2zM4 9h1v1h-1zM8 9h1v1h-1zM11 9h5v1h-5zM17 9h1v1h-1zM19 9h5v1h-5zM1 10h2v1h-2zM6 10h3v1h-3zM11 10h1v1h-1zM13 10h3v1h-3zM17 10h5v1h-5zM23 10h2v1h-2zM0 11h1v1h-1zM9 11h1v1h-1zM15 11h3v1h-3zM19 11h1v1h-1zM21 11h1v1h-1zM24 11h1v1h-1zM0 12h1v1h-1zM4 12h4v1h-4zM9 12h2v1h-2zM16 12h1v1h-1zM18 12h1v1h-1zM24 12h1v1h-1zM0 13h1v1h-1zM2 13h1v1h-1zM4 13h1v1h-1zM7 13h4v1h-4zM12 13h2v1h-2zM15 13h3v1h-3zM19 13h1v1h-1zM23 13h1v1h-1zM0 14h1v1h-1zM3 14h1v1h-1zM6 14h2v1h-2zM9 14h1v1h-1zM13 14h9v1h-9zM23 14h2v1h-2zM0 15h1v1h-1zM2 15h1v1h-1zM4 15h2v1h-2zM8 15h1v1h-1zM12 15h1v1h-1zM16 15h2v1h-2zM19 15h1v1h-1zM21 15h2v1h-2zM24 15h1v1h-1zM0 16h1v1h-1zM6 16h1v1h-1zM8 16h1v1h-1zM10 16h1v1h-1zM12 16h9v1h-9zM22 16h1v1h-1zM8 17h1v1h-1zM10 17h1v1h-1zM14 17h1v1h-1zM16 17h1v1h-1zM20 17h1v1h-1zM0 18h7v1h-7zM12 18h1v1h-1zM14 18h1v1h-1zM16 18h1v1h-1zM18 18h1v1h-1zM20 18h1v1h-1zM24 18h1v1h-1zM0 19h1v1h-1zM6 19h1v1h-1zM9 19h1v1h-1zM11 19h1v1h-1zM15 19h2v1h-2zM20 19h1v1h-1zM24 19h1v1h-1zM0 20h1v1h-1zM2 20h3v1h-3zM6 20h1v1h-1zM9 20h12v1h-12zM22 20h1v1h-1zM0 21h1v1h-1zM2 21h3v1h-3zM6 21h1v1h-1zM10 21h1v1h-1zM12 21h1v1h-1zM14 21h1v1h-1zM16 21h1v1h-1zM18 21h1v1h-1zM23 21h2v1h-2zM0 22h1v1h-1zM2 22h3v1h-3zM6 22h1v1h-1zM9 22h2v1h-2zM13 22h4v1h-4zM21 22h2v1h-2zM24 22h1v1h-1zM0 23h1v1h-1zM6 23h1v1h-1zM9 23h1v1h-1zM11 23h1v1h-1zM14 23h1v1h-1zM16 23h2v1h-2zM19 23h2v1h-2zM24 23h1v1h-1zM0 24h7v1h-7zM8 24h3v1h-3zM12 24h1v1h-1zM14 24h1v1h-1zM16 24h2v1h-2zM21 24h1v1h-1zM24 24h1v1h-1z" fill="#1a1a1a"/></svg>
+      <p class="r-txt">
+        홈페이지에서 정기후원 신청도 가능합니다^^
+        <small>www.hanmill.org · QR코드로 바로 접속</small>
+      </p>
+    </div>
+    <p class="fund-cta">사회복지법인 한밀과 함께해 주세요^^</p>
+  </div>
+
+</section>
+
+</body>
+</html>
