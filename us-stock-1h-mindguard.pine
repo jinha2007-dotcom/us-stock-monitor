@@ -1,0 +1,157 @@
+//@version=6
+// ============================================================================
+// 마인드가드 1H — 매매 심리 보정형 미국주식 1시간봉 전략
+// ----------------------------------------------------------------------------
+// 이 전략은 "판단"보다 "습관 보정"에 초점을 둔 시스템입니다.
+// 재량 매매에서 흔히 나타나는 행동 편향을 규칙으로 강제 차단합니다:
+//
+//   [편향]                         → [코드로 강제하는 규칙]
+//   손절을 미루고 버티기(손실회피)  → ATR 기반 자동 손절 + 시간 손절(기한부 보유)
+//   물타기(평단 낮추기)             → pyramiding=0, 보유 중 추가 진입 불가
+//   한 종목 몰빵                    → 트레이드당 리스크 % 기반 자동 수량 + 포지션 상한
+//   고변동성 종목에 끌림            → 변동성(ATR%) 상한 필터, 초과 시 진입 금지
+//   손절 직후 복수매매/재진입       → 손절 후 쿨다운(재진입 금지 구간)
+//   연속 손실에 무리하게 계속       → 연속 손실 서킷브레이커(강제 휴식)
+//   수익은 빨리, 손실은 늦게 끊기   → 본전 스탑(수익 절반 도달 시 손절가를 진입가로)
+//
+// 진입 자체는 승률이 높은 전형적 평균회귀:
+//   EMA 추세 필터 + 볼린저 하단 눌림 + RSI(2) 과매도 → 롱 / 중간밴드 익절
+//   롱 전용 (숏 없음 — 손실 관리가 목적이므로 방향 리스크를 늘리지 않음)
+//
+// ▶ 사용: 1시간봉 차트에 추가 → 전략 테스터로 종목별 성과 확인
+// ▶ 알람: 알람 생성 → 조건에서 이 전략 → "alert() 함수 호출만" → 만료 무제한
+//   (진입/익절/손절/시간손절/서킷브레이커 발동이 각각 메시지로 옵니다)
+// ============================================================================
+
+strategy("마인드가드 1H — 심리 보정형", shorttitle="MindGuard 1H",
+     overlay=true,
+     pyramiding=0,
+     initial_capital=15000,
+     default_qty_type=strategy.fixed, default_qty_value=1,
+     commission_type=strategy.commission.percent, commission_value=0.03,
+     slippage=1,
+     calc_on_every_tick=false,
+     process_orders_on_close=true)
+
+// ===== 진입 신호 설정 =====
+grpSig   = "진입 신호 (전형적 평균회귀)"
+bbLen    = input.int(20,    "볼린저 기간",         minval=2,  group=grpSig)
+bbDev    = input.float(2.0, "볼린저 편차",         step=0.1,  group=grpSig)
+emaLen   = input.int(200,   "추세 EMA",            minval=10, group=grpSig)
+rsiTh    = input.float(15,  "RSI(2) 매수 기준(이하)", minval=1, maxval=50, group=grpSig)
+
+// ===== 리스크·심리 가드레일 =====
+grpRisk    = "가드레일 ① 손절·자금 관리"
+riskPct    = input.float(1.0, "트레이드당 리스크 (% of 계좌)", minval=0.1, maxval=5,  step=0.1, group=grpRisk, tooltip="손절 시 잃는 금액을 계좌의 이 비율로 고정. 수량이 자동 계산됩니다.")
+maxPosPct  = input.float(30,  "포지션 최대 비중 (% of 계좌)",  minval=5,   maxval=100, step=5,  group=grpRisk, tooltip="한 포지션이 계좌에서 차지할 수 있는 최대 비중 — 몰빵 방지")
+atrLen     = input.int(14,    "ATR 기간", minval=1, group=grpRisk)
+stopMult   = input.float(2.0, "손절 ATR 배수", step=0.1, group=grpRisk)
+timeStop   = input.int(40,    "시간 손절 (봉 수)", minval=5, group=grpRisk, tooltip="이 봉 수 안에 익절/손절이 안 나면 무조건 청산 — 장기 물림 방지. 1시간봉 40개 ≈ 정규장 약 6거래일")
+useBE      = input.bool(true, "본전 스탑 사용", group=grpRisk, tooltip="목표(중간밴드)까지 절반 이상 오면 손절가를 진입가로 올림 — 수익 트레이드가 손실로 뒤집히는 것 방지")
+
+grpPsy     = "가드레일 ② 심리 서킷브레이커"
+cooldown   = input.int(8,   "손절 후 쿨다운 (봉 수)",  minval=0, group=grpPsy, tooltip="손절 직후 복수 매매 방지 — 이 기간 동안 신규 진입 금지")
+maxStreak  = input.int(3,   "연속 손실 한도 (회)",     minval=1, group=grpPsy)
+pauseBars  = input.int(35,  "한도 도달 시 강제 휴식 (봉 수)", minval=5, group=grpPsy, tooltip="연속 손실이 한도에 닿으면 이 기간 동안 전략 정지. 1시간봉 35개 ≈ 정규장 약 5거래일")
+maxAtrPct  = input.float(3.0, "변동성 상한 (ATR/가격 %)", minval=0.5, step=0.1, group=grpPsy, tooltip="봉당 평균 변동폭이 이 %를 넘는 과열 구간(레버리지 ETF급 변동성)에서는 진입하지 않음")
+
+// ===== 지표 =====
+basis  = ta.sma(close, bbLen)
+dev    = ta.stdev(close, bbLen) * bbDev
+upper  = basis + dev
+lower  = basis - dev
+emaT   = ta.ema(close, emaLen)
+atrV   = ta.atr(atrLen)
+rsi2   = ta.rsi(close, 2)
+atrPct = atrV / close * 100
+
+// ===== 상태 추적 (손실 스트릭 / 쿨다운) =====
+var int   lastLossBar = na
+var int   lossStreak  = 0
+var float entryPx     = na
+var float stopPx      = na
+var int   entryBar    = na
+
+newClosed = strategy.closedtrades > nz(strategy.closedtrades[1])
+if newClosed
+    lastPnl = strategy.closedtrades.profit(strategy.closedtrades - 1)
+    if lastPnl < 0
+        lossStreak  += 1
+        lastLossBar := bar_index
+    else
+        lossStreak := 0
+
+// 강제 휴식이 끝나면 스트릭 리셋
+if lossStreak >= maxStreak and not na(lastLossBar) and bar_index - lastLossBar > pauseBars
+    lossStreak := 0
+
+inCooldown = not na(lastLossBar) and bar_index - lastLossBar <= cooldown
+inPause    = lossStreak >= maxStreak
+volTooHigh = atrPct > maxAtrPct
+
+// ===== 진입 =====
+flat     = strategy.position_size == 0
+signal   = close > emaT and close < lower and rsi2 <= rsiTh
+blocked  = inCooldown or inPause or volTooHigh
+longCond = flat and signal and not blocked
+
+stopDist = stopMult * atrV
+riskQty  = strategy.equity * riskPct / 100 / stopDist
+capQty   = strategy.equity * maxPosPct / 100 / close
+qty      = math.floor(math.min(riskQty, capQty))
+
+if longCond and qty >= 1
+    entryPx  := close
+    stopPx   := close - stopDist
+    entryBar := bar_index
+    strategy.entry("롱", strategy.long, qty=qty)
+    strategy.exit("손절", from_entry="롱", stop=stopPx, comment="손절",
+         alert_message="손절 체결 — 계획된 소액 손실입니다. 쿨다운 후 다음 기회를 기다리세요")
+    alert(syminfo.ticker + " 1H 롱 진입 " + str.tostring(qty) + "주 @ " + str.tostring(close, format.mintick)
+         + " | 손절 " + str.tostring(stopPx, format.mintick)
+         + " | 목표 중간밴드 " + str.tostring(basis, format.mintick)
+         + " | 리스크 " + str.tostring(riskPct, "#.#") + "% 고정 — 손절가는 절대 내리지 않기", alert.freq_once_per_bar_close)
+
+// ===== 포지션 관리 =====
+if strategy.position_size > 0
+    // 본전 스탑: 목표까지 절반 이상 진행 시 손절가를 진입가로
+    if useBE and close >= entryPx + (basis - entryPx) * 0.5 and stopPx < entryPx
+        stopPx := entryPx
+        alert(syminfo.ticker + " 본전 스탑 작동 — 손절가를 진입가 " + str.tostring(entryPx, format.mintick) + "로 이동. 이제 이 트레이드는 잃지 않습니다", alert.freq_once_per_bar_close)
+    strategy.exit("손절", from_entry="롱", stop=stopPx, comment="손절",
+         alert_message="손절 체결 — 계획된 소액 손실입니다. 쿨다운 후 다음 기회를 기다리세요")
+    if close >= basis
+        strategy.close("롱", comment="익절(중간밴드)")
+        alert(syminfo.ticker + " 1H 익절 (중간밴드 도달) @ " + str.tostring(close, format.mintick), alert.freq_once_per_bar_close)
+    else if bar_index - entryBar >= timeStop
+        strategy.close("롱", comment="시간 손절")
+        alert(syminfo.ticker + " 1H 시간 손절 — " + str.tostring(timeStop) + "봉 내 미도달. '기다리면 오르겠지'를 시스템이 대신 끊었습니다 @ " + str.tostring(close, format.mintick), alert.freq_once_per_bar_close)
+
+// 서킷브레이커 발동 알림 (발동 순간 1회)
+if inPause and not inPause[1]
+    alert(syminfo.ticker + " ⛔ 서킷브레이커: 연속 손실 " + str.tostring(maxStreak) + "회 — " + str.tostring(pauseBars) + "봉(약 1주) 강제 휴식. 지금은 시장이 아니라 확률이 쉬라고 말하는 구간입니다", alert.freq_once_per_bar_close)
+
+// ===== 시각화 =====
+pU = plot(upper, "상단밴드", color=color.new(#4493f8, 40))
+pL = plot(lower, "하단밴드", color=color.new(#4493f8, 40))
+plot(basis, "중간밴드(목표)", color=color.new(#d4a72c, 20), style=plot.style_circles)
+plot(emaT, "추세 EMA", color=#c678dd, linewidth=2)
+fill(pU, pL, color=color.new(#4493f8, 94))
+plot(strategy.position_size > 0 ? stopPx : na, "손절선", color=#e5534b, style=plot.style_linebr, linewidth=2)
+plotshape(longCond and qty >= 1, "진입", shape.triangleup, location.belowbar, color=#26a269, size=size.small)
+bgcolor(inPause ? color.new(#e5534b, 88) : inCooldown ? color.new(#d4a72c, 92) : na, title="휴식/쿨다운 구간")
+
+// ===== 상태 패널 =====
+var table t = table.new(position.top_right, 2, 5, bgcolor=color.new(#0d1117, 15), border_width=1, border_color=color.new(#2d333b, 0))
+if barstate.islast
+    stateTxt = inPause ? "⛔ 강제 휴식" : inCooldown ? "⏸ 쿨다운" : volTooHigh ? "🌊 변동성 초과" : flat ? "⚪ 대기" : "🟢 보유 중"
+    table.cell(t, 0, 0, "상태",        text_color=#8b949e, text_size=size.small)
+    table.cell(t, 1, 0, stateTxt,      text_color=#e6edf3, text_size=size.small)
+    table.cell(t, 0, 1, "연속 손실",   text_color=#8b949e, text_size=size.small)
+    table.cell(t, 1, 1, str.tostring(lossStreak) + " / " + str.tostring(maxStreak), text_color=lossStreak > 0 ? #e5534b : #e6edf3, text_size=size.small)
+    table.cell(t, 0, 2, "변동성 ATR%", text_color=#8b949e, text_size=size.small)
+    table.cell(t, 1, 2, str.tostring(atrPct, "#.##") + "% / " + str.tostring(maxAtrPct, "#.#") + "%", text_color=volTooHigh ? #e5534b : #e6edf3, text_size=size.small)
+    table.cell(t, 0, 3, "1회 리스크",  text_color=#8b949e, text_size=size.small)
+    table.cell(t, 1, 3, str.tostring(riskPct, "#.#") + "% ≈ $" + str.tostring(strategy.equity * riskPct / 100, "#"), text_color=#e6edf3, text_size=size.small)
+    table.cell(t, 0, 4, "승률",        text_color=#8b949e, text_size=size.small)
+    table.cell(t, 1, 4, strategy.closedtrades > 0 ? str.tostring(strategy.wintrades / strategy.closedtrades * 100, "#.#") + "%" : "—", text_color=#e6edf3, text_size=size.small)
