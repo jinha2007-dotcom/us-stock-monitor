@@ -1,0 +1,126 @@
+//@version=6
+// ============================================================================
+// 미국주식 1시간봉 볼린저 전략 — 트레이딩뷰 Pine Script (유료 플랜용)
+// ----------------------------------------------------------------------------
+// ▶ 사용법
+//   1. TradingView 하단 "Pine 에디터" 열기 → 이 파일 전체 붙여넣기 → 저장 → "차트에 추가"
+//   2. 차트를 1시간봉(1H)으로, 심볼은 SPY / QQQ 등 미국주식·ETF로 설정
+//   3. 우측 "전략 테스터" 탭에서 승률·손익 확인 (기간 시뮬레이션 자동 실행)
+//
+// ▶ 알람 설정 (유료 플랜은 알람 무제한·만료 없음)
+//   1. 우측 상단 시계 아이콘(알람) → "알람 생성"
+//   2. 조건: 이 전략 이름 선택 → "alert() 함수 호출만" 선택
+//   3. 만료: 무제한 / 알림: 앱 푸시·이메일 등 원하는 방식 체크
+//   → 진입·청산·손절 시점마다 상세 메시지(가격·손절가 포함)가 자동 발송됨
+//
+// ▶ 전략 모드 2가지 (설정창에서 선택)
+//   ① 평균회귀 (승률형) — 기본값. 가장 전형적인 고승률 방식:
+//      EMA200 위 상승추세에서 가격이 볼린저 하단까지 눌릴 때(과매도) 매수,
+//      중간밴드 복귀 시 익절. RSI(2) 과매도 필터로 승률 보강. 기본 롱 전용.
+//   ② 밴드 돌파 (모니터 동일) — 이 저장소 index.html 실시간 모니터와 같은 로직:
+//      종가가 상단밴드+EMA194 위 돌파 시 롱 / 하단밴드+EMA 아래 이탈 시 숏.
+//   * 두 모드 모두 봉 마감 기준 진입, ATR 배수 손절, 중간밴드 기준 청산.
+// ============================================================================
+
+strategy("미국주식 1H 볼린저 전략 (평균회귀/돌파)", shorttitle="BB 1H",
+     overlay=true,
+     initial_capital=10000,
+     default_qty_type=strategy.percent_of_equity, default_qty_value=100,
+     commission_type=strategy.commission.percent, commission_value=0.03,
+     slippage=1,
+     calc_on_every_tick=false,
+     process_orders_on_close=true)
+
+// ===== 입력 =====
+MODE_MR = "① 평균회귀 (승률형)"
+MODE_BO = "② 밴드 돌파 (모니터 동일)"
+mode       = input.string(MODE_MR, "전략 모드", options=[MODE_MR, MODE_BO])
+allowShort = input.bool(false, "숏 진입 허용", tooltip="미국주식 장기 우상향 특성상 롱 전용이 승률이 높습니다. 돌파 모드에서 모니터와 동일하게 쓰려면 켜세요.")
+atrLen     = input.int(14, "ATR 기간", minval=1)
+
+grpMR      = "① 평균회귀 설정"
+mrBbLen    = input.int(20,    "볼린저 기간",        minval=2,  group=grpMR)
+mrBbDev    = input.float(2.0, "볼린저 편차",        step=0.1,  group=grpMR)
+mrEmaLen   = input.int(200,   "추세 EMA",           minval=10, group=grpMR)
+mrUseRsi   = input.bool(true, "RSI(2) 과매도 필터", group=grpMR, tooltip="RSI(2)가 기준 이하로 과매도일 때만 매수 → 승률 상승, 신호 수 감소")
+mrRsiTh    = input.float(15,  "RSI 매수 기준(이하)", minval=1, maxval=50, group=grpMR)
+mrStopMult = input.float(2.5, "손절 ATR 배수",      step=0.01, group=grpMR)
+
+grpBO      = "② 밴드 돌파 설정 (index.html 모니터 기본값)"
+boBbLen    = input.int(23,     "볼린저 기간",   minval=2,  group=grpBO)
+boBbDev    = input.float(2.96, "볼린저 편차",   step=0.01, group=grpBO)
+boEmaLen   = input.int(194,    "추세 EMA",      minval=10, group=grpBO)
+boStopMult = input.float(3.19, "손절 ATR 배수", step=0.01, group=grpBO)
+
+// ===== 지표 =====
+isMR     = mode == MODE_MR
+bbLen    = isMR ? mrBbLen    : boBbLen
+bbDev    = isMR ? mrBbDev    : boBbDev
+emaLen   = isMR ? mrEmaLen   : boEmaLen
+stopMult = isMR ? mrStopMult : boStopMult
+
+basis = ta.sma(close, bbLen)
+dev   = ta.stdev(close, bbLen) * bbDev
+upper = basis + dev
+lower = basis - dev
+emaT  = ta.ema(close, emaLen)
+atrV  = ta.atr(atrLen)
+rsi2  = ta.rsi(close, 2)
+
+// ===== 신호 판정 (봉 마감 기준) =====
+// 평균회귀: 상승추세(종가 > EMA)에서 하단밴드 아래로 눌림 + RSI(2) 과매도 → 롱
+mrLongCond  = close > emaT and close < lower and (not mrUseRsi or rsi2 <= mrRsiTh)
+mrShortCond = close < emaT and close > upper and (not mrUseRsi or rsi2 >= 100 - mrRsiTh)
+mrLongExit  = close >= basis  // 중간밴드 복귀 = 익절
+mrShortExit = close <= basis
+
+// 밴드 돌파: 모니터(index.html)와 동일
+boLongCond  = close > upper and close > emaT
+boShortCond = close < lower and close < emaT
+boLongExit  = close < basis   // 중간밴드 이탈 = 청산
+boShortExit = close > basis
+
+longCond  = isMR ? mrLongCond  : boLongCond
+shortCond = (isMR ? mrShortCond : boShortCond) and allowShort
+longExit  = isMR ? mrLongExit  : boLongExit
+shortExit = isMR ? mrShortExit : boShortExit
+
+flat = strategy.position_size == 0
+
+// ===== 주문 + 알람 =====
+f_msg(side, stopP) =>
+    syminfo.ticker + " 1H " + side + " 진입 @ " + str.tostring(close, format.mintick) + " / 손절 " + str.tostring(stopP, format.mintick)
+
+if flat and longCond
+    longStop = close - stopMult * atrV
+    strategy.entry("롱", strategy.long, alert_message="롱 진입")
+    strategy.exit("롱 손절", from_entry="롱", stop=longStop, alert_message="롱 손절")
+    alert(f_msg("롱", longStop), alert.freq_once_per_bar_close)
+
+if flat and shortCond
+    shortStop = close + stopMult * atrV
+    strategy.entry("숏", strategy.short, alert_message="숏 진입")
+    strategy.exit("숏 손절", from_entry="숏", stop=shortStop, alert_message="숏 손절")
+    alert(f_msg("숏", shortStop), alert.freq_once_per_bar_close)
+
+if strategy.position_size > 0 and longExit
+    strategy.close("롱", comment=isMR ? "익절(중간밴드)" : "중간밴드 이탈", alert_message="롱 청산")
+    alert(syminfo.ticker + " 1H 롱 청산 (" + (isMR ? "중간밴드 익절" : "중간밴드 이탈") + ") @ " + str.tostring(close, format.mintick), alert.freq_once_per_bar_close)
+
+if strategy.position_size < 0 and shortExit
+    strategy.close("숏", comment=isMR ? "익절(중간밴드)" : "중간밴드 이탈", alert_message="숏 청산")
+    alert(syminfo.ticker + " 1H 숏 청산 (" + (isMR ? "중간밴드 익절" : "중간밴드 이탈") + ") @ " + str.tostring(close, format.mintick), alert.freq_once_per_bar_close)
+
+// "alert() 함수 호출만" 대신 개별 조건 알람을 쓰고 싶을 때 (조건 선택식 알람)
+alertcondition(longCond,  title="롱 진입 신호",  message="{{ticker}} 1H 롱 진입 신호 @ {{close}}")
+alertcondition(shortCond, title="숏 진입 신호",  message="{{ticker}} 1H 숏 진입 신호 @ {{close}}")
+
+// ===== 시각화 (모니터와 같은 색감) =====
+pU = plot(upper, "상단밴드", color=color.new(#4493f8, 30))
+pL = plot(lower, "하단밴드", color=color.new(#4493f8, 30))
+plot(basis, "중간밴드", color=color.new(#d4a72c, 20), style=plot.style_circles)
+plot(emaT, "추세 EMA", color=#c678dd, linewidth=2)
+fill(pU, pL, color=color.new(#4493f8, 94))
+bgcolor(close > emaT ? color.new(#26a269, 96) : color.new(#e5534b, 96), title="추세 배경")
+plotshape(flat and longCond,  "롱 신호", shape.triangleup,   location.belowbar, color=#26a269, size=size.small)
+plotshape(flat and shortCond, "숏 신호", shape.triangledown, location.abovebar, color=#e5534b, size=size.small)
