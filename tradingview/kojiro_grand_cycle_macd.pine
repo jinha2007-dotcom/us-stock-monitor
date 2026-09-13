@@ -1,0 +1,89 @@
+//@version=6
+// ─────────────────────────────────────────────────────────────────────────────
+// 고지로 강사(小次郎講師) 대순환 MACD (大循環MACD)
+// 별도 패널 인디케이터. 3개 EMA의 차이를 3개의 MACD로 표현하고
+// 각 MACD의 부호 조합으로 대순환 스테이지를 판정한다.
+//
+//   MACD1 = 단기 - 중기
+//   MACD2 = 단기 - 장기
+//   MACD3 = 중기 - 장기
+//
+//   스테이지 1: MACD1>0, MACD2>0, MACD3>0
+//   스테이지 2: MACD1<0, MACD2>0, MACD3>0
+//   스테이지 3: MACD1<0, MACD2<0, MACD3>0
+//   스테이지 4: MACD1<0, MACD2<0, MACD3<0
+//   스테이지 5: MACD1>0, MACD2<0, MACD3<0
+//   스테이지 6: MACD1>0, MACD2>0, MACD3<0
+//
+// MACD1 이 시그널선을 상향 돌파하면 단기 반등의 선행 신호(스테이지 5→6→1 로 가는 초입),
+// MACD3 까지 0선 위로 올라오면 스테이지 1 확정으로 본다.
+// ─────────────────────────────────────────────────────────────────────────────
+indicator("고지로 대순환 MACD", shorttitle="대순환 MACD", overlay=false)
+
+src    = input.source(close, "소스")
+lenS   = input.int(5,  "단기 EMA", minval=1)
+lenM   = input.int(20, "중기 EMA", minval=1)
+lenL   = input.int(40, "장기 EMA", minval=1)
+sigLen = input.int(9,  "시그널 기간", minval=1)
+showBg = input.bool(true, "스테이지 배경색")
+showHist = input.bool(true, "MACD1 히스토그램")
+
+emaS = ta.ema(src, lenS)
+emaM = ta.ema(src, lenM)
+emaL = ta.ema(src, lenL)
+
+macd1 = emaS - emaM
+macd2 = emaS - emaL
+macd3 = emaM - emaL
+sig1  = ta.ema(macd1, sigLen)
+sig2  = ta.ema(macd2, sigLen)
+sig3  = ta.ema(macd3, sigLen)
+
+stageRaw = switch
+    macd1 > 0 and macd2 > 0 and macd3 > 0 => 1
+    macd1 < 0 and macd2 > 0 and macd3 > 0 => 2
+    macd1 < 0 and macd2 < 0 and macd3 > 0 => 3
+    macd1 < 0 and macd2 < 0 and macd3 < 0 => 4
+    macd1 > 0 and macd2 < 0 and macd3 < 0 => 5
+    macd1 > 0 and macd2 > 0 and macd3 < 0 => 6
+    => 0
+var int stage = 0
+stage := stageRaw == 0 ? stage : stageRaw
+
+stageColor(s) =>
+    switch s
+        1 => color.new(#26a69a, 80)
+        2 => color.new(#9ccc65, 85)
+        3 => color.new(#ffa726, 85)
+        4 => color.new(#ef5350, 80)
+        5 => color.new(#ab47bc, 85)
+        6 => color.new(#42a5f5, 85)
+        => na
+
+bgcolor(showBg ? stageColor(stage) : na, title="스테이지 배경")
+hline(0, "0선", color=color.new(color.gray, 50))
+
+plot(showHist ? macd1 - sig1 : na, "MACD1 히스토그램", style=plot.style_columns,
+     color=macd1 - sig1 >= 0 ? color.new(#26a69a, 40) : color.new(#ef5350, 40))
+plot(macd1, "MACD1 (단기-중기)", color=#ffd54f, linewidth=2)
+plot(sig1,  "시그널1",           color=color.new(#ffd54f, 60))
+plot(macd2, "MACD2 (단기-장기)", color=#ff7043, linewidth=2)
+plot(sig2,  "시그널2",           color=color.new(#ff7043, 60))
+plot(macd3, "MACD3 (중기-장기)", color=#42a5f5, linewidth=2)
+plot(sig3,  "시그널3",           color=color.new(#42a5f5, 60))
+
+// 선행 신호: MACD1 이 시그널선을 교차
+buyLead  = ta.crossover(macd1, sig1)
+sellLead = ta.crossunder(macd1, sig1)
+plotshape(buyLead,  "MACD1 골든크로스", shape.circle, location.bottom, color=#26a69a, size=size.tiny)
+plotshape(sellLead, "MACD1 데드크로스", shape.circle, location.top,    color=#ef5350, size=size.tiny)
+
+// 확정 신호: MACD3 의 0선 돌파 = 중기/장기 배열 전환
+buyConfirm  = ta.crossover(macd3, 0)
+sellConfirm = ta.crossunder(macd3, 0)
+
+alertcondition(buyLead,     "MACD1 골든크로스",  "대순환 MACD: MACD1 골든크로스 ({{ticker}} {{interval}})")
+alertcondition(sellLead,    "MACD1 데드크로스",  "대순환 MACD: MACD1 데드크로스 ({{ticker}} {{interval}})")
+alertcondition(buyConfirm,  "MACD3 0선 상향돌파", "대순환 MACD: 중기>장기 전환 ({{ticker}} {{interval}})")
+alertcondition(sellConfirm, "MACD3 0선 하향돌파", "대순환 MACD: 중기<장기 전환 ({{ticker}} {{interval}})")
+alertcondition(ta.change(stage) != 0 and stage != 0, "스테이지 전환", "대순환 MACD: 스테이지 전환 ({{ticker}} {{interval}})")

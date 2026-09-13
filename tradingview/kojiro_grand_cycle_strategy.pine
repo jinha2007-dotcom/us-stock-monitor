@@ -1,0 +1,95 @@
+//@version=6
+// ─────────────────────────────────────────────────────────────────────────────
+// 고지로 이동평균선 대순환 분석 전략 (백테스트용)
+// 진입: 대순환 스테이지 + 3선 방향/간격 조건
+// 자금관리: 터틀 방식 — 계좌의 일정 %만 ATR 기준으로 리스크 노출 (1유닛 = 리스크금액 / (ATR × 배수))
+// 손절: 진입가 ± ATR × 배수, 청산: 스테이지 이탈
+// ─────────────────────────────────────────────────────────────────────────────
+strategy("고지로 MA 대순환 전략", shorttitle="MA 대순환 전략", overlay=true,
+         initial_capital=10000, currency=currency.USD,
+         commission_type=strategy.commission.percent, commission_value=0.05,
+         slippage=1, pyramiding=0, calc_on_every_tick=false,
+         default_qty_type=strategy.fixed, default_qty_value=1)
+
+// ── 입력 ────────────────────────────────────────────────────────────────────
+src      = input.source(close, "소스")
+maType   = input.string("EMA", "이동평균 종류", options=["EMA", "SMA"])
+lenS     = input.int(5,  "단기 기간", minval=1)
+lenM     = input.int(20, "중기 기간", minval=1)
+lenL     = input.int(40, "장기 기간", minval=1)
+useEarly = input.bool(false, "조기 진입(早仕掛け)", group="신호")
+allowShort = input.bool(true, "숏 허용", group="신호")
+atrLen   = input.int(20, "ATR 기간", group="자금관리")
+atrMult  = input.float(2.0, "손절 ATR 배수", minval=0.1, step=0.1, group="자금관리")
+riskPct  = input.float(1.0, "1회 리스크 % (계좌 대비)", minval=0.1, step=0.1, group="자금관리")
+startT   = input.time(timestamp("2015-01-01T00:00:00"), "백테스트 시작", group="기간")
+endT     = input.time(timestamp("2099-12-31T00:00:00"), "백테스트 종료", group="기간")
+inRange  = time >= startT and time <= endT
+
+// ── 이동평균·스테이지 ───────────────────────────────────────────────────────
+ma(s, l) => maType == "EMA" ? ta.ema(s, l) : ta.sma(s, l)
+maS = ma(src, lenS)
+maM = ma(src, lenM)
+maL = ma(src, lenL)
+
+stageRaw = switch
+    maS > maM and maM > maL => 1
+    maM > maS and maS > maL => 2
+    maM > maL and maL > maS => 3
+    maL > maM and maM > maS => 4
+    maL > maS and maS > maM => 5
+    maS > maL and maL > maM => 6
+    => 0
+var int stage = 0
+stage := stageRaw == 0 ? stage : stageRaw
+
+upS = maS > maS[1]
+upM = maM > maM[1]
+upL = maL > maL[1]
+dnS = maS < maS[1]
+dnM = maM < maM[1]
+dnL = maL < maL[1]
+gapSM = maS - maM
+gapML = maM - maL
+expandUp = gapSM > gapSM[1] and gapML > gapML[1]
+expandDn = gapSM < gapSM[1] and gapML < gapML[1]
+
+longCond  = (stage == 1 and upS and upM and upL and expandUp) or (useEarly and stage == 6 and upS and upM and close > maL)
+shortCond = (stage == 4 and dnS and dnM and dnL and expandDn) or (useEarly and stage == 3 and dnS and dnM and close < maL)
+exitLong  = stage == 2 or stage == 3 or stage == 4 or stage == 5
+exitShort = stage == 5 or stage == 6 or stage == 1 or stage == 2
+
+// ── 자금관리 (터틀 유닛) ────────────────────────────────────────────────────
+atr = ta.atr(atrLen)
+riskAmt = strategy.equity * riskPct / 100
+unitQty = atr > 0 ? math.floor(riskAmt / (atr * atrMult)) : 0
+
+// ── 주문 ────────────────────────────────────────────────────────────────────
+if inRange and longCond and strategy.position_size <= 0 and unitQty > 0
+    strategy.entry("롱", strategy.long, qty=unitQty)
+    strategy.exit("롱 손절", from_entry="롱", stop=close - atr * atrMult)
+if inRange and allowShort and shortCond and strategy.position_size >= 0 and unitQty > 0
+    strategy.entry("숏", strategy.short, qty=unitQty)
+    strategy.exit("숏 손절", from_entry="숏", stop=close + atr * atrMult)
+if strategy.position_size > 0 and exitLong
+    strategy.close("롱", comment="스테이지 이탈")
+if strategy.position_size < 0 and exitShort
+    strategy.close("숏", comment="스테이지 이탈")
+if not inRange and strategy.position_size != 0
+    strategy.close_all(comment="기간 종료")
+
+// ── 그리기 ──────────────────────────────────────────────────────────────────
+stageColor(s) =>
+    switch s
+        1 => color.new(#26a69a, 80)
+        2 => color.new(#9ccc65, 85)
+        3 => color.new(#ffa726, 85)
+        4 => color.new(#ef5350, 80)
+        5 => color.new(#ab47bc, 85)
+        6 => color.new(#42a5f5, 85)
+        => na
+plot(maS, "단기", color=#ffd54f)
+pM = plot(maM, "중기", color=#ff7043, linewidth=2)
+pL = plot(maL, "장기", color=#42a5f5, linewidth=2)
+fill(pM, pL, color=maM > maL ? color.new(#26a69a, 85) : color.new(#ef5350, 85), title="띠(帯)")
+bgcolor(stageColor(stage), title="스테이지 배경")

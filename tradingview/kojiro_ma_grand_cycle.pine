@@ -1,0 +1,143 @@
+//@version=6
+// ─────────────────────────────────────────────────────────────────────────────
+// 고지로 강사(小次郎講師) 이동평균선 대순환 분석 (移動平均線大循環分析)
+// 오버레이 인디케이터: 3개 이동평균선의 배열로 6개 스테이지를 판정하고
+// 스테이지 배경색, 중기-장기 띠(帯), 전환 라벨, 매매 신호, 얼럿을 제공한다.
+//
+// 스테이지 정의 (위에서부터 순서)
+//   1  단기 > 중기 > 장기   안정 상승기  (본격 매수 구간)
+//   2  중기 > 단기 > 장기   상승 종료기
+//   3  중기 > 장기 > 단기   하락 시작기
+//   4  장기 > 중기 > 단기   안정 하락기  (본격 매도 구간)
+//   5  장기 > 단기 > 중기   하락 종료기
+//   6  단기 > 장기 > 중기   상승 시작기
+// 정상 순환: 1→2→3→4→5→6→1 (역행하면 추세 되돌림 실패로 해석)
+// ─────────────────────────────────────────────────────────────────────────────
+indicator("고지로 이동평균선 대순환 분석", shorttitle="MA 대순환", overlay=true, max_labels_count=500)
+
+// ── 입력 ────────────────────────────────────────────────────────────────────
+src       = input.source(close, "소스")
+maType    = input.string("EMA", "이동평균 종류", options=["EMA", "SMA"])
+lenS      = input.int(5,  "단기 기간", minval=1)
+lenM      = input.int(20, "중기 기간", minval=1)
+lenL      = input.int(40, "장기 기간", minval=1)
+showBand  = input.bool(true, "중기-장기 띠(帯) 채우기", group="표시")
+showBg    = input.bool(true, "스테이지 배경색", group="표시")
+showLabel = input.bool(true, "스테이지 전환 라벨", group="표시")
+showSig   = input.bool(true, "매매 신호 마커", group="표시")
+showTable = input.bool(true, "상태 테이블", group="표시")
+useEarly  = input.bool(false, "조기 진입(早仕掛け) 허용: 6단계 매수 / 3단계 매도", group="신호")
+
+// ── 이동평균 ─────────────────────────────────────────────────────────────────
+ma(s, l) => maType == "EMA" ? ta.ema(s, l) : ta.sma(s, l)
+maS = ma(src, lenS)
+maM = ma(src, lenM)
+maL = ma(src, lenL)
+
+// ── 스테이지 판정 ───────────────────────────────────────────────────────────
+stageRaw = switch
+    maS > maM and maM > maL => 1
+    maM > maS and maS > maL => 2
+    maM > maL and maL > maS => 3
+    maL > maM and maM > maS => 4
+    maL > maS and maS > maM => 5
+    maS > maL and maL > maM => 6
+    => 0
+var int stage = 0
+stage := stageRaw == 0 ? stage : stageRaw   // 동가(同値)일 때는 직전 스테이지 유지
+
+stageName(s) =>
+    switch s
+        1 => "1 안정상승기"
+        2 => "2 상승종료기"
+        3 => "3 하락시작기"
+        4 => "4 안정하락기"
+        5 => "5 하락종료기"
+        6 => "6 상승시작기"
+        => "-"
+
+stageColor(s) =>
+    switch s
+        1 => color.new(#26a69a, 80)
+        2 => color.new(#9ccc65, 85)
+        3 => color.new(#ffa726, 85)
+        4 => color.new(#ef5350, 80)
+        5 => color.new(#ab47bc, 85)
+        6 => color.new(#42a5f5, 85)
+        => na
+
+// ── 방향·간격 (3선의 기울기와 벌어짐) ─────────────────────────────────────────
+upS = maS > maS[1]
+upM = maM > maM[1]
+upL = maL > maL[1]
+dnS = maS < maS[1]
+dnM = maM < maM[1]
+dnL = maL < maL[1]
+gapSM = maS - maM
+gapML = maM - maL
+expandUp = gapSM > gapSM[1] and gapML > gapML[1]   // 상승 배열이 벌어지는 중
+expandDn = gapSM < gapSM[1] and gapML < gapML[1]   // 하락 배열이 벌어지는 중
+allUp = upS and upM and upL
+allDn = dnS and dnM and dnL
+
+// ── 매매 신호 ───────────────────────────────────────────────────────────────
+// 기본: 1단계에서 3선 모두 상승 + 간격 확대 → 매수 / 4단계에서 3선 모두 하락 + 간격 확대 → 매도
+// 조기 진입: 6단계에서 단·중기 상승 → 매수 / 3단계에서 단·중기 하락 → 매도
+longCond  = (stage == 1 and allUp and expandUp) or (useEarly and stage == 6 and upS and upM and close > maL)
+shortCond = (stage == 4 and allDn and expandDn) or (useEarly and stage == 3 and dnS and dnM and close < maL)
+// 청산: 스테이지가 이탈하면(1→2, 4→5) 청산. 조기 진입 포지션은 역행(6→5, 3→2)해도 청산
+exitLong  = stage == 2 or stage == 3 or stage == 4 or stage == 5
+exitShort = stage == 5 or stage == 6 or stage == 1 or stage == 2
+
+var int pos = 0   // 1 롱, -1 숏, 0 관망
+longEntry  = pos != 1  and longCond
+shortEntry = pos != -1 and shortCond
+longExit   = pos == 1  and exitLong
+shortExit  = pos == -1 and exitShort
+if longExit or shortExit
+    pos := 0
+if longEntry
+    pos := 1
+if shortEntry
+    pos := -1
+
+// ── 그리기 ──────────────────────────────────────────────────────────────────
+pS = plot(maS, "단기", color=color.new(#ffd54f, 0), linewidth=1)
+pM = plot(maM, "중기", color=color.new(#ff7043, 0), linewidth=2)
+pL = plot(maL, "장기", color=color.new(#42a5f5, 0), linewidth=2)
+fill(pM, pL, color=showBand ? (maM > maL ? color.new(#26a69a, 85) : color.new(#ef5350, 85)) : na, title="띠(帯)")
+bgcolor(showBg ? stageColor(stage) : na, title="스테이지 배경")
+
+stageChanged = ta.change(stage) != 0 and stage != 0
+if showLabel and stageChanged
+    isUpSide = stage == 1 or stage == 6 or stage == 5
+    label.new(bar_index, isUpSide ? low : high, str.tostring(stage),
+              style=isUpSide ? label.style_label_up : label.style_label_down,
+              color=color.new(stageColor(stage), 0), textcolor=color.white, size=size.small)
+
+plotshape(showSig and longEntry,  "매수",     shape.triangleup,   location.belowbar, color=#26a69a, size=size.small, text="매수")
+plotshape(showSig and shortEntry, "매도",     shape.triangledown, location.abovebar, color=#ef5350, size=size.small, text="매도")
+plotshape(showSig and longExit,   "롱 청산",  shape.xcross,       location.abovebar, color=#26a69a, size=size.tiny)
+plotshape(showSig and shortExit,  "숏 청산",  shape.xcross,       location.belowbar, color=#ef5350, size=size.tiny)
+
+// ── 상태 테이블 ─────────────────────────────────────────────────────────────
+var table tbl = table.new(position.top_right, 2, 5, border_width=1)
+dirTxt(u, d) => u ? "▲" : d ? "▼" : "─"
+if showTable and barstate.islast
+    table.cell(tbl, 0, 0, "스테이지", text_color=color.white, bgcolor=color.new(#333333, 0))
+    table.cell(tbl, 1, 0, stageName(stage), text_color=color.white, bgcolor=color.new(stageColor(stage), 0))
+    table.cell(tbl, 0, 1, "단기 " + str.tostring(lenS), text_color=color.white, bgcolor=color.new(#333333, 0))
+    table.cell(tbl, 1, 1, str.tostring(maS, format.mintick) + " " + dirTxt(upS, dnS), text_color=color.white, bgcolor=color.new(#333333, 0))
+    table.cell(tbl, 0, 2, "중기 " + str.tostring(lenM), text_color=color.white, bgcolor=color.new(#333333, 0))
+    table.cell(tbl, 1, 2, str.tostring(maM, format.mintick) + " " + dirTxt(upM, dnM), text_color=color.white, bgcolor=color.new(#333333, 0))
+    table.cell(tbl, 0, 3, "장기 " + str.tostring(lenL), text_color=color.white, bgcolor=color.new(#333333, 0))
+    table.cell(tbl, 1, 3, str.tostring(maL, format.mintick) + " " + dirTxt(upL, dnL), text_color=color.white, bgcolor=color.new(#333333, 0))
+    table.cell(tbl, 0, 4, "간격", text_color=color.white, bgcolor=color.new(#333333, 0))
+    table.cell(tbl, 1, 4, expandUp ? "상승 확대" : expandDn ? "하락 확대" : "수렴/혼조", text_color=color.white, bgcolor=color.new(#333333, 0))
+
+// ── 얼럿 ────────────────────────────────────────────────────────────────────
+alertcondition(longEntry,    "대순환 매수",       "MA 대순환: 매수 신호 ({{ticker}} {{interval}})")
+alertcondition(shortEntry,   "대순환 매도",       "MA 대순환: 매도 신호 ({{ticker}} {{interval}})")
+alertcondition(longExit,     "대순환 롱 청산",    "MA 대순환: 롱 청산 ({{ticker}} {{interval}})")
+alertcondition(shortExit,    "대순환 숏 청산",    "MA 대순환: 숏 청산 ({{ticker}} {{interval}})")
+alertcondition(stageChanged, "스테이지 전환",     "MA 대순환: 스테이지 전환 ({{ticker}} {{interval}})")
